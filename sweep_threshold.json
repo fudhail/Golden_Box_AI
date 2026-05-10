@@ -1,0 +1,52 @@
+{
+  "threshold": 0.23658940718935256,
+  "features": [
+    "rejection_intensity",
+    "penetration_depth",
+    "body_ratio",
+    "close_pullback",
+    "vol_expansion",
+    "vol_spike_ratio",
+    "vol_trend",
+    "box_width",
+    "box_position",
+    "trend_dist_20",
+    "trend_dist_50",
+    "trend_alignment",
+    "roc_5",
+    "rsi_extreme",
+    "counter_trend",
+    "atr_14",
+    "bb_width",
+    "bb_position",
+    "hour",
+    "day_of_week",
+    "london_session",
+    "ny_session",
+    "overlap_session",
+    "is_upside"
+  ],
+  "meta_weights": [
+    0.363674192238516,
+    0.2402231033856496,
+    -0.16790907786666012
+  ],
+  "meta_intercept": -1.7812612811906297,
+  "meta_scaler_mean": [
+    0.32910021897396696,
+    0.29208775257424435,
+    0.30679986700009526
+  ],
+  "meta_scaler_std": [
+    0.2348941237059988,
+    0.23025240490343077,
+    0.227551830968378
+  ],
+  "base_models": [
+    "xgb",
+    "lgb",
+    "cat"
+  ],
+  "has_lgb": true,
+  "has_cat": true
+}

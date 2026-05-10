@@ -1,0 +1,14 @@
+{
+  "volume_source": "real_volume",
+  "duplicates_removed": 0,
+  "zero_range_removed": 2,
+  "zero_volume_removed": 48632,
+  "price_errors_removed": 0,
+  "suspicious_weekday_gaps": 184,
+  "raw_candles": 66821,
+  "clean_candles": 18187,
+  "date_start": "2015-01-02 09:00:00",
+  "date_end": "2018-02-09 23:00:00",
+  "avg_spread_pts": 2.88648,
+  "volume_spikes_10x": 119
+}
