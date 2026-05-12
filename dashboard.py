@@ -79,39 +79,74 @@ if st.sidebar.button("🚀 RUN BACKTEST", use_container_width=True):
                 if active_trade is None and pending_trade is not None:
                     entry = curr["open"]
                     if pending_trade["type"] == "BUY":
-                        tp = entry + (abs(entry - pending_trade["sl"]) * take_profit_rr)
+                        sl_dist = abs(entry - pending_trade["sl"])
+                        tp = entry + (sl_dist * take_profit_rr)
+                        partial_tp = entry + (sl_dist * (take_profit_rr / 2.0))
                     else:
-                        tp = entry - (abs(entry - pending_trade["sl"]) * take_profit_rr)
+                        sl_dist = abs(entry - pending_trade["sl"])
+                        tp = entry - (sl_dist * take_profit_rr)
+                        partial_tp = entry - (sl_dist * (take_profit_rr / 2.0))
 
                     active_trade = {
                         "type": pending_trade["type"],
                         "entry": entry,
                         "sl": pending_trade["sl"],
                         "tp": tp,
+                        "partial_tp": partial_tp,
                         "signal_time": pending_trade["signal_time"],
+                        "lot": lot_size,
+                        "partial_taken": False
                     }
                     pending_trade = None
                 
                 if active_trade:
                     if active_trade['type'] == 'BUY':
+                        # --- PARTIAL PROFIT & BREAK-EVEN DISABLED ---
+                        # if not active_trade['partial_taken'] and curr['high'] >= active_trade['partial_tp']:
+                        #     profit_dollars = (active_trade['partial_tp'] - active_trade['entry']) * (active_trade['lot'] / 2.0) * CONTRACT_SIZE
+                        #     balance += profit_dollars
+                        #     trades.append({'time': curr['time'], 'type': 'BUY', 'result': 'PARTIAL_WIN', 'pnl': profit_dollars, 'entry': active_trade['entry']})
+                        #     active_trade['partial_taken'] = True
+                        #     active_trade['lot'] /= 2.0
+                        #     active_trade['sl'] = active_trade['entry']
+
                         if curr['low'] <= active_trade['sl']:
-                            loss_dollars = (active_trade['entry'] - active_trade['sl']) * lot_size * CONTRACT_SIZE
-                            balance -= loss_dollars
-                            trades.append({'time': curr['time'], 'type': 'BUY', 'result': 'LOSS', 'pnl': -loss_dollars, 'entry': active_trade['entry']})
+                            if active_trade['sl'] == active_trade['entry']:
+                                pnl = 0.0
+                                res = 'BREAK_EVEN'
+                            else:
+                                pnl = -(active_trade['entry'] - active_trade['sl']) * active_trade['lot'] * CONTRACT_SIZE
+                                res = 'LOSS'
+                            balance += pnl
+                            trades.append({'time': curr['time'], 'type': 'BUY', 'result': res, 'pnl': pnl, 'entry': active_trade['entry']})
                             active_trade = None
                         elif curr['high'] >= active_trade['tp']:
-                            profit_dollars = (active_trade['tp'] - active_trade['entry']) * lot_size * CONTRACT_SIZE
+                            profit_dollars = (active_trade['tp'] - active_trade['entry']) * active_trade['lot'] * CONTRACT_SIZE
                             balance += profit_dollars
                             trades.append({'time': curr['time'], 'type': 'BUY', 'result': 'WIN', 'pnl': profit_dollars, 'entry': active_trade['entry']})
                             active_trade = None
                     elif active_trade['type'] == 'SELL':
+                        # --- PARTIAL PROFIT & BREAK-EVEN DISABLED ---
+                        # if not active_trade['partial_taken'] and curr['low'] <= active_trade['partial_tp']:
+                        #     profit_dollars = (active_trade['entry'] - active_trade['partial_tp']) * (active_trade['lot'] / 2.0) * CONTRACT_SIZE
+                        #     balance += profit_dollars
+                        #     trades.append({'time': curr['time'], 'type': 'SELL', 'result': 'PARTIAL_WIN', 'pnl': profit_dollars, 'entry': active_trade['entry']})
+                        #     active_trade['partial_taken'] = True
+                        #     active_trade['lot'] /= 2.0
+                        #     active_trade['sl'] = active_trade['entry']
+
                         if curr['high'] >= active_trade['sl']:
-                            loss_dollars = (active_trade['sl'] - active_trade['entry']) * lot_size * CONTRACT_SIZE
-                            balance -= loss_dollars
-                            trades.append({'time': curr['time'], 'type': 'SELL', 'result': 'LOSS', 'pnl': -loss_dollars, 'entry': active_trade['entry']})
+                            if active_trade['sl'] == active_trade['entry']:
+                                pnl = 0.0
+                                res = 'BREAK_EVEN'
+                            else:
+                                pnl = -(active_trade['sl'] - active_trade['entry']) * active_trade['lot'] * CONTRACT_SIZE
+                                res = 'LOSS'
+                            balance += pnl
+                            trades.append({'time': curr['time'], 'type': 'SELL', 'result': res, 'pnl': pnl, 'entry': active_trade['entry']})
                             active_trade = None
                         elif curr['low'] <= active_trade['tp']:
-                            profit_dollars = (active_trade['entry'] - active_trade['tp']) * lot_size * CONTRACT_SIZE
+                            profit_dollars = (active_trade['entry'] - active_trade['tp']) * active_trade['lot'] * CONTRACT_SIZE
                             balance += profit_dollars
                             trades.append({'time': curr['time'], 'type': 'SELL', 'result': 'WIN', 'pnl': profit_dollars, 'entry': active_trade['entry']})
                             active_trade = None
@@ -142,8 +177,16 @@ if st.sidebar.button("🚀 RUN BACKTEST", use_container_width=True):
             # ==========================================
             st.success("Backtest Complete!")
             
-            wins = len([t for t in trades if t['result'] == 'WIN'])
-            total_trades = len(trades)
+            real_trades_pnl = []
+            current_pnl = 0.0
+            for t in trades:
+                current_pnl += t['pnl']
+                if t['result'] in ('WIN', 'LOSS', 'BREAK_EVEN'):
+                    real_trades_pnl.append(current_pnl)
+                    current_pnl = 0.0
+                    
+            wins = len([p for p in real_trades_pnl if p > 0])
+            total_trades = len(real_trades_pnl)
             win_rate = (wins / total_trades * 100) if total_trades > 0 else 0
             net_profit = balance - initial_balance
 
@@ -222,16 +265,17 @@ if st.sidebar.button("🚀 RUN BACKTEST", use_container_width=True):
             fig_chart.update_layout(
                 height=750, 
                 template="plotly_dark", 
-                xaxis_rangeslider_visible=False,
+                dragmode="pan",  # Allows clicking and dragging to scroll left/right
+                xaxis_rangeslider_visible=True, # Adds the scrollbar at the bottom
                 plot_bgcolor='#121212',  # Deep MT5 black/grey
                 paper_bgcolor='#121212',
-                yaxis=dict(side='right', title="Price"), # MT5 puts price on the right
-                xaxis=dict(title="Time", type='category', nticks=10), # Removes weekend gaps
+                yaxis=dict(side='right', title="Price", fixedrange=False), # MT5 puts price on the right
+                xaxis=dict(title="Time", type='category', nticks=10, fixedrange=False), # Removes weekend gaps
                 margin=dict(l=10, r=10, t=30, b=30),
                 legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
             )
             
-            st.plotly_chart(fig_chart, use_container_width=True)
+            st.plotly_chart(fig_chart, use_container_width=True, config={'scrollZoom': True})
 
             # Display Trade Log below
             st.markdown("### 📝 Trade Log")

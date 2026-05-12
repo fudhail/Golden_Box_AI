@@ -26,15 +26,12 @@ except ModuleNotFoundError:
     engineer_all_features = None
     build_fakeout_features = None
 
-# ── Load model & threshold ────────────────────────────────────────────────────
-with open("sweep_threshold.json", "r") as f:
-    meta_info = json.load(f)
+from ai_backtester_v2 import load_ensemble_models, predict_ensemble
 
+# ── Load model & threshold ────────────────────────────────────────────────────
+models, meta_info = load_ensemble_models()
 FEATURES  = meta_info["features"]
 THRESHOLD = meta_info["threshold"]
-
-model = xgb.XGBClassifier()
-model.load_model("sweep_model.json")
 
 app = FastAPI(title="Golden AI - V2")
 

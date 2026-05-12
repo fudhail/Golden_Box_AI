@@ -69,13 +69,16 @@ N_FOLDS     = 5
 # ═══════════════════════════════════════════════════════════════════════════════
 # SECTION 1 — DATA LOADING
 # ═══════════════════════════════════════════════════════════════════════════════
-def load_and_clean(path: str) -> pd.DataFrame:
-    df = pd.read_csv(path)
-    df.columns = df.columns.str.strip().str.lower()
-    for alias in ["tick volume", "tickvolume", "vol"]:
-        if alias in df.columns:
-            df.rename(columns={alias: "volume"}, inplace=True)
-    df["time"] = pd.to_datetime(df["time"])
+def load_and_clean(path: str = None) -> pd.DataFrame:
+    import MetaTrader5 as mt5
+    from datetime import date, timedelta
+    from ai_backtester_v2 import pull_data_by_date
+    
+    date_to = date.today()
+    date_from = date_to - timedelta(days=730)
+    print(f"  Pulling dynamic MT5 data from {date_from} to {date_to}...")
+    
+    df = pull_data_by_date("XAUUSD", mt5.TIMEFRAME_H1, date_from, date_to)
     df.sort_values("time", inplace=True)
     df.reset_index(drop=True, inplace=True)
     return df
@@ -136,7 +139,7 @@ def engineer_all_features(df: pd.DataFrame) -> pd.DataFrame:
     # ── Volume context ──────────────────────────────────────────────────────
     df["vol_spike_ratio"] = v / df["avg_vol_10"].replace(0, 1e-9)
     df["vol_trend"]       = v.rolling(5).mean().shift(1) / \
-                             v.rolling(20).mean().shift(1)  # Short vs long vol trend
+                             v.rolling(20).mean().shift(1).replace(0, 1e-9)  # Short vs long vol trend
 
     # ── Session / time ──────────────────────────────────────────────────────
     df["hour"]      = df["time"].dt.hour
