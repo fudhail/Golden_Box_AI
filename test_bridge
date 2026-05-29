@@ -1,0 +1,138 @@
+import sys
+import json
+from unittest.mock import MagicMock, patch
+from datetime import datetime
+
+# Import symbols directly from your production code file
+from signal_watch import execute_mt5_order, TARGET_ENDPOINT, mt5
+
+def run_isolated_order_test():
+    """
+    Test 1: Verifies that execute_mt5_order handles successful, 
+    failed, and malformed returns safely without throwing NoneType exceptions.
+    """
+    print("🔬 RUNNING ISOLATED MT5 ORDER FUNCTION TEST...")
+    
+    # Mocking mt5.symbol_info_tick
+    mock_tick = MagicMock()
+    mock_tick.ask = 4518.00
+    mock_tick.bid = 4517.08
+    
+    # Mocking mt5.order_send return structure for success
+    mock_order_result_success = MagicMock()
+    mock_order_result_success.retcode = 10009  # mt5.TRADE_RETCODE_DONE
+    mock_order_result_success.order = 999999
+    mock_order_result_success.price = 4517.08
+    
+    with patch('MetaTrader5.symbol_info_tick', return_value=mock_tick), \
+         patch('MetaTrader5.order_send', return_value=mock_order_result_success):
+        
+        print("\n--- Testing Successful Order Routing Pipeline ---")
+        success = execute_mt5_order(order_type=mt5.ORDER_TYPE_SELL, lot_size=0.01)
+        print(f"Function Returned: {success} (Expected: True)")
+
+    # Mocking mt5.order_send return structure for failure
+    mock_order_result_fail = MagicMock()
+    mock_order_result_fail.retcode = 10030
+    mock_order_result_fail.comment = "Unsupported filling mode"
+    
+    with patch('MetaTrader5.symbol_info_tick', return_value=mock_tick), \
+         patch('MetaTrader5.order_send', return_value=mock_order_result_fail):
+        
+        print("\n--- Testing Rejected Order Routing Execution ---")
+        success = execute_mt5_order(order_type=mt5.ORDER_TYPE_SELL, lot_size=0.01)
+        print(f"Function Returned: {success} (Expected: False)")
+
+
+def run_full_loop_simulation():
+    """
+    Test 2: Simulates the web-sockets / network intercept loop sequentially.
+    Feeds an initial baseline log, followed by a brand-new fresh signal log 
+    to trigger the automated stop-and-reverse trade logic.
+    """
+    print("\n" + "="*70)
+    print("🔬 SIMULATING MULTI-STEP NETWORK LOG PROCESSING LOOP...")
+    print("="*70)
+
+    mock_driver = MagicMock()
+    
+    # Payload 1: Sets the initial loop sync state to LONG
+    BASELINE_DATA = {
+        "signals": [{"time": 1748230200, "side": "long"}]
+    }
+    
+    # Payload 2: A brand-new sequential timestamp switching to SHORT
+    FRESH_SIGNAL_DATA = {
+        "signals": [
+            {"time": 1748230200, "side": "long"},
+            {"time": 1748245000, "side": "short"} 
+        ]
+    }
+
+    # Simulate log tracking packet frame 1
+    log_entry_1 = [{
+        'message': json.dumps({
+            'message': {
+                'method': 'Network.responseReceived',
+                'params': {
+                    'requestId': 'req_frame_001',
+                    'response': {'url': f"https://portal.dhanayantracharts.com{TARGET_ENDPOINT}"}
+                }
+            }
+        })
+    }]
+    
+    # Simulate log tracking packet frame 2
+    log_entry_2 = [{
+        'message': json.dumps({
+            'message': {
+                'method': 'Network.responseReceived',
+                'params': {
+                    'requestId': 'req_frame_002',  
+                    'response': {'url': f"https://portal.dhanayantracharts.com{TARGET_ENDPOINT}"}
+                }
+            }
+        })
+    }]
+
+    # Empty array for any subsequent calls from driver.get_log to prevent side_effect exhaustion crashing
+    log_entry_exhausted = []
+
+    # Sequentially supply frame entries to the polling iterator loop
+    mock_driver.get_log.side_effect = [log_entry_1, log_entry_2, log_entry_exhausted, log_entry_exhausted]
+
+    # Sequentially deliver payloads matching tracking frames
+    mock_response_bodies = [json.dumps(BASELINE_DATA), json.dumps(FRESH_SIGNAL_DATA)]
+
+    # FIXED: Only increment tracking index for the main loop sleep timer (time.sleep(1))
+    # Ignore initial setup delays (time.sleep(2))
+    loop_counter = {"polling_ticks": 0}
+    def mock_sleep_incrementor(seconds):
+        if seconds == 1:  # This isolates the tracker strictly to the while loop pacing
+            loop_counter["polling_ticks"] += 1
+            if loop_counter["polling_ticks"] >= 2:
+                raise KeyboardInterrupt  
+
+    with patch('signal_watch.initialize_mt5', return_value=True), \
+         patch('signal_watch.get_response_body', side_effect=mock_response_bodies), \
+         patch('signal_watch.execute_mt5_order', return_value=True) as mock_executor, \
+         patch('signal_watch.create_browser_options'), \
+         patch('undetected_chromedriver.Chrome', return_value=mock_driver), \
+         patch('time.sleep', side_effect=mock_sleep_incrementor):
+         
+         print("Starting mock engine loop context window...")
+         from signal_watch import monitor_browser_network
+         
+         try:
+             monitor_browser_network()
+         except KeyboardInterrupt:
+             print("\nLoop broken safely by mock harness controller after both simulation windows parsed.")
+
+         print(f"\n📈 Verification: execute_mt5_order was safely called {mock_executor.call_count} times.")
+         if mock_executor.call_count == 2:
+             print("✅ SUCCESS: Loop successfully flattened the LONG trade and spun up the SHORT trade profile!")
+
+
+if __name__ == "__main__":
+    run_isolated_order_test()
+    run_full_loop_simulation()

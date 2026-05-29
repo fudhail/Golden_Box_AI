@@ -11,7 +11,7 @@ SYMBOL = "XAUUSD"
 TIMEFRAME = mt5.TIMEFRAME_H1
 LOT_SIZE = 0.1
 MAGIC_NUMBER = 101010
-SL_MULTIPLIER = 0.6
+SL_MULTIPLIER = 0.60
 RR_RATIO = 3.0
 
 def execute_trade(symbol, lot, order_type, price, sl, tp):
@@ -26,6 +26,7 @@ def execute_trade(symbol, lot, order_type, price, sl, tp):
         "sl": sl,
         "tp": tp,
         "deviation": 20, # Max slippage allowed
+        
         "magic": MAGIC_NUMBER,
         "comment": "Golden AI Engine",
         "type_time": mt5.ORDER_TIME_GTC,
